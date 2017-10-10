@@ -1,0 +1,3 @@
+manager
+modules-available/*.so
+modules-enabled/*.so
