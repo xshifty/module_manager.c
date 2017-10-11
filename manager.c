@@ -49,13 +49,13 @@ int main()
         if ( strstr(mod_dirent->d_name, ".so") != NULL ) {
             modules[i] = (char *) malloc(sizeof(char) * PATH_MAX);
             sprintf(modules[i], "%s/%s", enabled_path, mod_dirent->d_name);
-            printf("[ FOUND %s ]\n", modules[i]);
+            printf("[ FOUND %s ]\n", basename(modules[i]));
             modules_found++;
             i++;
         }
     }
     closedir(mod_dir_handler);
-    modules[MAX_LOADABLE_MODULES] = NULL;
+    modules[i] = NULL;
 
     if (modules_found == 0) {
         printf("[ NO MODULES FOUND! EXITING! ]\n");
@@ -63,23 +63,42 @@ int main()
     }
 
     i = 0;
+    dlerror();
     while (modules[i] != NULL) {
         printf("[ LOADING %s ]\n", basename(modules[i]));
-
         handler[i] = dlopen(modules[i], RTLD_LAZY);
-        setup[i] = dlsym(handler[i], "setup");
-        loop[i] = dlsym(handler[i], "loop");
 
+        if (dlerror()) {
+            fprintf(stderr, "[ %s ]\n", dlerror());
+            i++;
+            continue;
+        }
+
+        setup[i] = dlsym(handler[i], "setup");
+        if (dlerror()) {
+            fprintf(stderr, "[ %s ]\n", dlerror());
+            i++;
+            continue;
+        }
+
+        loop[i] = dlsym(handler[i], "loop");
+        if (dlerror()) {
+            fprintf(stderr, "[ %s ]\n", dlerror());
+            i++;
+            continue;
+        }
+
+        printf("[ OK %s ]\n", basename(modules[i]));
+        printf("[ CALLING %s@setup() ]\n", basename(modules[i]));
         setup[i]();
         i++;
     }
-    modules[i] = NULL;
 
     for (;;) {
         i = 0;
         while (modules[i] != NULL) {
             if ( !jobs[i] || !(pthread_kill(jobs[i], 0) == 0) ) {
-                printf("[ STARTING MODULE %s ]\n", modules[i]);
+                printf("[ CALLING %s@loop() ]\n", basename(modules[i]));
                 running[i] = pthread_create(&jobs[i], NULL, (void*)loop_start, loop[i]);
                 if (running[i]) {
                     fprintf(stderr, "[ CAN'T START MODULE %s ]\n", modules[i]);
